@@ -203,6 +203,16 @@ async def cancel_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
+async def handle_free_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
+    if not text:
+        return
+    await update.message.reply_text("🤖 Думаю...")
+    answer = await ai.ask_ai(text)
+    for chunk in api._chunk_text(answer, 4000):
+        await update.message.reply_text(chunk)
+
+
 async def _send_meal(update_or_query, meal: dict):
     user_id = None
     if isinstance(update_or_query, Update):
@@ -377,6 +387,7 @@ def main():
     app.add_handler(CommandHandler("fridge", cmd_fridge))
     app.add_handler(photo_conv)
     app.add_handler(CallbackQueryHandler(callback_handler))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_free_text))
 
     PORT = os.getenv("PORT")
     if PORT:
