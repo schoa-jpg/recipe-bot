@@ -4,3 +4,4 @@ python-dotenv>=1.0
 deep-translator>=1.11
 fastapi>=0.104
 uvicorn>=0.24
+openai>=1.0

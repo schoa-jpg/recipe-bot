@@ -14,11 +14,13 @@ from telegram.ext import (
     CommandHandler,
     CallbackQueryHandler,
     MessageHandler,
+    ConversationHandler,
     filters,
     ContextTypes,
 )
 
 import api
+import ai
 import storage
 from keyboards import (
     recipe_buttons,
@@ -30,13 +32,20 @@ from keyboards import (
 load_dotenv()
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
+WAITING_PHOTO = 1
+
 WELCOME = (
     "👋 Привет! Я бот для поиска рецептов.\n\n"
+    "📖 Поиск рецептов:\n"
     "/search <название> — поиск рецепта\n"
     "/ingredient <ингредиент> — поиск по ингредиенту\n"
     "/random — случайный рецепт\n"
     "/categories — категории блюд\n"
-    "/favorites — мои избранные рецепты"
+    "/favorites — мои избранные рецепты\n\n"
+    "🤖 ИИ-помощник:\n"
+    "/ai <вопрос> — спроси о кулинарии\n"
+    "/fridge <ингредиенты> — рецепт из того, что есть\n"
+    "/photo — отправь фото еды, я определю блюдо"
 )
 
 
@@ -134,6 +143,64 @@ async def cmd_favorites(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "❤️ Ваши избранные (по рейтингу):", reply_markup=favorites_list_buttons(user_id)
     )
+
+
+async def cmd_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = " ".join(context.args) if context.args else ""
+    if not query:
+        await update.message.reply_text(
+            "Спроси что-нибудь о кулинарии!\n"
+            "/ai как приготовить идеальный стейк\n"
+            "/ai диетические рецепты на ужин\n"
+            "/ai что приготовить из курицы"
+        )
+        return
+    await update.message.reply_text("🤖 Думаю...")
+    answer = await ai.ask_ai(query)
+    for chunk in api._chunk_text(answer, 4000):
+        await update.message.reply_text(chunk)
+
+
+async def cmd_fridge(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ingredients = " ".join(context.args) if context.args else ""
+    if not ingredients:
+        await update.message.reply_text(
+            "Напиши что есть в холодильнике!\n"
+            "/fridge курица, рис, перец, лук\n"
+            "/fridge яйца, мука, молоко"
+        )
+        return
+    await update.message.reply_text("🍳 Придумываю рецепт...")
+    prompt = (
+        f"Придумай рецепт из следующих ингредиентов: {ingredients}.\n"
+        f"Дай название, список ингредиентов с точными мерами и пошаговое приготовление."
+    )
+    answer = await ai.ask_ai(prompt)
+    for chunk in api._chunk_text(answer, 4000):
+        await update.message.reply_text(chunk)
+
+
+async def cmd_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "📸 Отправь мне фото еды, и я определю блюdo и дам рецепт!"
+    )
+    return WAITING_PHOTO
+
+
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    photo = update.message.photo[-1]
+    file = await context.bot.get_file(photo.file_id)
+    image_url = file.url
+    await update.message.reply_text("🔍 Анализирую фото...")
+    answer = await ai.analyze_image(image_url)
+    for chunk in api._chunk_text(answer, 4000):
+        await update.message.reply_text(chunk)
+    return ConversationHandler.END
+
+
+async def cancel_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Отменено.")
+    return ConversationHandler.END
 
 
 async def _send_meal(update_or_query, meal: dict):
@@ -290,12 +357,25 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
+    photo_conv = ConversationHandler(
+        entry_points=[CommandHandler("photo", cmd_photo)],
+        states={
+            WAITING_PHOTO: [
+                MessageHandler(filters.PHOTO, handle_photo),
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel_photo)],
+    )
+
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("search", cmd_search))
     app.add_handler(CommandHandler("ingredient", cmd_ingredient))
     app.add_handler(CommandHandler("random", cmd_random))
     app.add_handler(CommandHandler("categories", cmd_categories))
     app.add_handler(CommandHandler("favorites", cmd_favorites))
+    app.add_handler(CommandHandler("ai", cmd_ai))
+    app.add_handler(CommandHandler("fridge", cmd_fridge))
+    app.add_handler(photo_conv)
     app.add_handler(CallbackQueryHandler(callback_handler))
 
     PORT = os.getenv("PORT")
