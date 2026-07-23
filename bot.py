@@ -8,7 +8,7 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 from dotenv import load_dotenv
-from telegram import Update, InputMediaPhoto, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InputMediaPhoto, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand, MenuButtonCommands
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -415,6 +415,19 @@ def main():
         async def on_startup():
             await app.initialize()
             await app.start()
+            await app.bot.set_my_commands([
+                BotCommand("start", "Начать"),
+                BotCommand("search", "Поиск рецепта"),
+                BotCommand("ingredient", "Поиск по ингредиенту"),
+                BotCommand("random", "Случайный рецепт"),
+                BotCommand("categories", "Категории блюд"),
+                BotCommand("favorites", "Избранные рецепты"),
+                BotCommand("ai", "Вопрос ИИ-помощнику"),
+                BotCommand("fridge", "Рецепт из того что есть"),
+                BotCommand("photo", "Определить блюдо по фото"),
+                BotCommand("chat2", "Чат с DeepSeek"),
+            ])
+            await app.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
             RENDER_URL = os.getenv("RENDER_EXTERNAL_URL")
             WEBHOOK_URL = f"{RENDER_URL}/webhook"
             await app.bot.set_webhook(WEBHOOK_URL)
@@ -440,6 +453,27 @@ def main():
         uvicorn.run(web_app, host="0.0.0.0", port=int(PORT))
     else:
         log.info("Starting polling mode")
+        import asyncio
+        loop = asyncio.new_event_loop()
+
+        async def setup():
+            await app.initialize()
+            await app.bot.set_my_commands([
+                BotCommand("start", "Начать"),
+                BotCommand("search", "Поиск рецепта"),
+                BotCommand("ingredient", "Поиск по ингредиенту"),
+                BotCommand("random", "Случайный рецепт"),
+                BotCommand("categories", "Категории блюд"),
+                BotCommand("favorites", "Избранные рецепты"),
+                BotCommand("ai", "Вопрос ИИ-помощнику"),
+                BotCommand("fridge", "Рецепт из того что есть"),
+                BotCommand("photo", "Определить блюдо по фото"),
+                BotCommand("chat2", "Чат с DeepSeek"),
+            ])
+            await app.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
+            await app.shutdown()
+
+        loop.run_until_complete(setup())
         app.run_polling()
 
 
