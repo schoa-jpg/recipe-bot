@@ -45,7 +45,8 @@ WELCOME = (
     "🤖 ИИ-помощник:\n"
     "/ai <вопрос> — спроси о кулинарии\n"
     "/fridge <ингредиенты> — рецепт из того, что есть\n"
-    "/photo — отправь фото еды, я определю блюдо"
+    "/photo — отправь фото еды, я определю блюдо\n"
+    "/chat2 <вопрос> — чат с DeepSeek (быстрый и дешёвый)"
 )
 
 
@@ -209,6 +210,17 @@ async def handle_free_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     await update.message.reply_text("🤖 Думаю...")
     answer = await ai.ask_ai(text)
+    for chunk in api._chunk_text(answer, 4000):
+        await update.message.reply_text(chunk)
+
+
+async def cmd_chat2(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = " ".join(context.args) if context.args else ""
+    if not query:
+        await update.message.reply_text("Напиши вопрос: /chat2 привет")
+        return
+    await update.message.reply_text("💬 DeepSeek думает...")
+    answer = await ai.ask_ai(query, model="deepseek/deepseek-chat")
     for chunk in api._chunk_text(answer, 4000):
         await update.message.reply_text(chunk)
 
@@ -385,6 +397,7 @@ def main():
     app.add_handler(CommandHandler("favorites", cmd_favorites))
     app.add_handler(CommandHandler("ai", cmd_ai))
     app.add_handler(CommandHandler("fridge", cmd_fridge))
+    app.add_handler(CommandHandler("chat2", cmd_chat2))
     app.add_handler(photo_conv)
     app.add_handler(CallbackQueryHandler(callback_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_free_text))
